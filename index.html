@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>鉄道ダイヤグラム作成ツール Ver.1.0</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header><h1>鉄道ダイヤグラム作成ツール Ver.1.0</h1></header>
+<main>
+<aside class="panel">
+  <div class="section">
+    <h2>1. 駅の管理</h2>
+    <label for="newStation">駅名</label>
+    <div class="row"><input id="newStation" placeholder="例：大阪"><button id="addStation">駅を追加</button></div>
+    <p class="hint">駅名変更は時刻表の左端から直接編集できます。上下ボタンで駅順を変更できます。</p>
+  </div>
+  <div class="section">
+    <h2>2. 列車の設定</h2>
+    <label for="trainName">列車番号・列車名</label><input id="trainName" placeholder="例：新快速 1234M">
+    <div class="row">
+      <div><label for="trainType">種別</label><input id="trainType" placeholder="新快速"></div>
+      <div><label for="trainColor">スジの色</label><input id="trainColor" type="color" value="#1769aa"></div>
+    </div>
+    <div class="actions"><button id="newTrain" class="secondary">新規列車入力</button><button id="saveTrain">列車を追加</button><button id="cancelEdit" class="secondary" hidden>編集取消</button></div>
+    <div id="status" role="status"></div>
+  </div>
+  <div class="section">
+    <h2>3. 登録済みの列車</h2><div id="trainList"></div>
+  </div>
+  <div>
+    <h2>4. 時間をずらして複製</h2>
+    <label for="shiftValue">ずらす時間</label>
+    <div class="row"><input id="shiftValue" type="number" value="30" step="1"><select id="shiftUnit"><option value="1">分</option><option value="60">時間</option></select></div>
+    <p class="hint">列車一覧で複製したい列車の「複製」ボタンを押してください。マイナス値にも対応します（ただし、日付が変わるものは不可）。元の列車は変更されません。</p>
+  </div>
+</aside>
+<section class="work">
+  <div class="tabs"><button id="tabTimetable" class="active">時刻表入力</button><button id="tabDiagram" class="secondary">ダイヤグラム</button></div>
+  <section id="timetablePane">
+    <h2>駅別時刻表</h2>
+    <p class="hint">駅ごとの着時刻・発時刻・停車/通過/経由なしを入力します。時刻は4桁入力（例：0625、2130）。入力後にHH:MM表示になります。通過駅は発欄に時刻を入力してください。</p>
+    <div class="table-wrap"><table id="timeTable"><thead><tr><th>駅名</th><th>着時刻</th><th>発時刻</th><th>扱い</th><th>駅操作</th></tr></thead><tbody></tbody></table></div>
+    <div class="actions"><button id="fillDemo" class="secondary">サンプル時刻を入力</button><button id="clearTimes" class="secondary">時刻をクリア</button></div>
+  </section>
+  <section id="diagramPane" hidden>
+    <div class="row" style="align-items:end;flex-wrap:wrap">
+      <div><h2>ダイヤグラム</h2><small class="hint">横軸：時刻 ／ 縦軸：駅</small></div>
+      <div><label for="startTime">表示開始</label><input id="startTime" type="text" value="0500" maxlength="5"></div>
+      <div><label for="endTime">表示終了</label><input id="endTime" type="text" value="2400" maxlength="5"></div>
+      <div style="flex:0 0 auto"><button id="redraw" class="secondary">更新</button></div>
+    </div>
+    <div class="actions">
+      <button id="saveJson">JSON保存</button><button id="loadJson" class="secondary">JSON読み込み</button><input id="jsonFile" type="file" accept=".json,application/json" hidden>
+      <button id="saveSvg" class="secondary">SVG保存</button><button id="saveCsv" class="secondary">CSV保存</button><button id="savePng" class="secondary">PNG保存</button>
+    </div>
+    <div id="diagramWrap"><svg id="diagram" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="鉄道ダイヤグラム"></svg></div>
+    <div id="legend" class="legend"></div>
+  </section>
+</section>
+</main>
+<footer>
+  <p>制作 203kei｜ 制作者Twitter: <a href="https://twitter.com/203kei_tetudou" target="_blank" rel="noopener noreferrer">https://twitter.com/203kei_tetudou</a></p>
+</footer>
+<script>
+(()=>{
+'use strict';
+const $=id=>document.getElementById(id),NS='http://www.w3.org/2000/svg';
+let stations=[],trains=[],editingId=null,formRows=[];
+const palette=['#1769aa','#d35400','#198754','#8e44ad','#c0392b','#117a65','#7d6608','#34495e'];
+function uid(){return 'v3_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,9)}
+function parseTime(v){
+ if(v==null||String(v).trim()==='')return null;
+ const s=String(v).trim().replace(':','');
+ if(!/^\d{1,4}$/.test(s))return NaN;
+ const padded=s.padStart(4,'0'),h=Number(padded.slice(0,2)),m=Number(padded.slice(2));
+ return h<=47&&m<60?h*60+m:NaN;
+}
+function format(n){return n==null?'':String(Math.floor(n/60)).padStart(2,'0')+':'+String(n%60).padStart(2,'0')}
+function inputFormat(v){const n=parseTime(v);return Number.isNaN(n)?v:n==null?'':format(n)}
+function download(blob,name){const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),1200)}
+function status(s,bad=false){$('status').textContent=s;$('status').style.color=bad?'#a33':'#17623c'}
+function freshRow(){return {arr:'',dep:'',kind:'none'}}
+function makeRows(){formRows=stations.map(freshRow);drawTable()}
+function resetForm(){editingId=null;$('trainName').value='';$('trainType').value='';$('trainColor').value='#1769aa';makeRows();$('saveTrain').textContent='列車を追加';$('cancelEdit').hidden=true}
+function rowToMinutes(r){
+ const a=parseTime(r.arr),d=parseTime(r.dep);
+ if(Number.isNaN(a)||Number.isNaN(d))return {error:true};
+ if(r.kind==='none')return {arr:null,dep:null,kind:'none'};
+ if(r.kind==='pass'){const t=d??a;return t==null?{error:true}:{arr:null,dep:t,kind:'pass'};}
+ if(a==null&&d==null)return {error:true};
+ return {arr:a,dep:d,kind:'stop'};
+}
+function saveTrain(){
+ const name=$('trainName').value.trim();if(!name){status('列車番号・列車名を入力してください。',true);return}
+ const points=formRows.map((r,i)=>({station:stations[i].name,...rowToMinutes(r)}));
+ if(points.some(p=>p.error)){status('時刻は4桁数字（例：0625）で入力してください。停車駅は着・発のどちらか、通過駅は時刻を入力してください。',true);return}
+ const used=points.filter(p=>p.kind!=='none');if(used.length<2){status('2駅以上の時刻を入力してください。',true);return}
+ const sequence=used.map(p=>p.dep??p.arr);
+ for(let i=1;i<sequence.length;i++)if(sequence[i]<sequence[i-1]){status('時刻の順番が逆になっています。',true);return}
+ const t={id:editingId||uid(),name,type:$('trainType').value.trim(),color:$('trainColor').value,points};
+ if(editingId)trains=trains.map(x=>x.id===editingId?t:x);else trains.push(t);
+ status(editingId?'列車を更新しました。':'列車を追加しました。');resetForm();render();
+}
+function editTrain(id){
+ const t=trains.find(x=>x.id===id);if(!t)return;
+ editingId=id;$('trainName').value=t.name;$('trainType').value=t.type||'';$('trainColor').value=t.color||'#1769aa';
+ formRows=stations.map(s=>{const p=t.points.find(p=>p.station===s.name);return p?{arr:p.arr==null?'':format(p.arr),dep:p.dep==null?'':format(p.dep),kind:p.kind||'stop'}:freshRow()});
+ drawTable();$('saveTrain').textContent='変更を保存';$('cancelEdit').hidden=false;status('編集中：'+t.name);showTab('timetable');
+}
+function deleteTrain(id){
+ const t=trains.find(x=>x.id===id);if(!t||!confirm(t.name+'を削除しますか？'))return;
+ trains=trains.filter(x=>x.id!==id);if(editingId===id)resetForm();render();status('列車を削除しました。');
+}
+function duplicateTrain(id){
+ const original=trains.find(t=>t.id===id);if(!original)return;
+ const raw=Number($('shiftValue').value),unit=Number($('shiftUnit').value);
+ if(!Number.isFinite(raw)||!Number.isInteger(raw)){alert('ずらす時間を整数で入力してください。');return}
+ const shift=raw*unit;
+ const copy={...original,id:uid(),name:original.name+'（複製）',points:original.points.map(p=>({...p,arr:p.arr==null?null:p.arr+shift,dep:p.dep==null?null:p.dep+shift}))};
+ if(copy.points.some(p=>(p.arr!=null&&p.arr<0)||(p.dep!=null&&p.dep<0))){alert('複製後の時刻が0時より前になります。複製できません。');return}
+ trains.push(copy);render();status(original.name+'を'+(shift>=0?'+':'')+shift+'分ずらして複製しました。');
+}
+function drawList(){
+ const el=$('trainList');el.replaceChildren();
+ if(!trains.length){el.textContent='列車はまだありません。';el.className='hint';return}
+ el.className='';
+ trains.forEach(t=>{
+  const d=document.createElement('div');d.className='train-card';
+  const name=document.createElement('span');name.className='name';name.textContent=(t.type?'['+t.type+'] ':'')+t.name;
+  const buttons=document.createElement('span');
+  const e=document.createElement('button');e.className='secondary';e.textContent='編集';e.onclick=()=>editTrain(t.id);
+  const c=document.createElement('button');c.className='secondary';c.textContent='複製';c.onclick=()=>duplicateTrain(t.id);
+  const x=document.createElement('button');x.className='danger';x.textContent='削除';x.onclick=()=>deleteTrain(t.id);
+  buttons.append(e,c,x);d.append(name,buttons);el.append(d);
+ });
+}
+function drawTable(){
+ const body=$('timeTable').querySelector('tbody');body.replaceChildren();
+ stations.forEach((s,i)=>{
+  const r=formRows[i]||freshRow(),tr=document.createElement('tr');
+  const nameTd=document.createElement('td'),nameInput=document.createElement('input');
+  nameInput.value=s.name;nameInput.setAttribute('aria-label','駅名');
+  nameInput.onchange=()=>renameStation(s.id,nameInput.value);
+  nameTd.append(nameInput);tr.append(nameTd);
+  ['arr','dep'].forEach(key=>{
+   const td=document.createElement('td'),input=document.createElement('input');
+   input.className='time';input.inputMode='numeric';input.maxLength=5;input.placeholder='例 0625';input.value=r[key];
+   input.setAttribute('aria-label',s.name+(key==='arr'?' 着時刻':' 発時刻'));
+   input.oninput=()=>{formRows[i][key]=input.value.replace(/[^\d:]/g,'').slice(0,5)};
+   input.onblur=()=>{if(input.value){const v=inputFormat(input.value);input.value=v;formRows[i][key]=v}};
+   td.append(input);tr.append(td);
+  });
+  const kindTd=document.createElement('td'),sel=document.createElement('select');
+  [['none','経由なし'],['stop','停車'],['pass','通過']].forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;sel.append(o)});
+  sel.value=r.kind;sel.onchange=()=>{formRows[i].kind=sel.value;if(sel.value==='pass')formRows[i].arr='';drawTable()};
+  kindTd.append(sel);tr.append(kindTd);
+  const actionTd=document.createElement('td'),tools=document.createElement('div');tools.className='station-tools';
+  const up=document.createElement('button');up.className='secondary';up.textContent='↑';up.disabled=i===0;up.onclick=()=>moveStation(i,-1);
+  const down=document.createElement('button');down.className='secondary';down.textContent='↓';down.disabled=i===stations.length-1;down.onclick=()=>moveStation(i,1);
+  const del=document.createElement('button');del.className='danger';del.textContent='削除';del.onclick=()=>deleteStation(s.id);
+  tools.append(up,down,del);actionTd.append(tools);tr.append(actionTd);body.append(tr);
+ });
+}
+function renameStation(id,value){
+ const name=value.trim();if(!name){alert('駅名を空欄にはできません。');drawTable();return}
+ if(stations.some(s=>s.id!==id&&s.name===name)){alert('同じ駅名は登録できません。');drawTable();return}
+ const s=stations.find(x=>x.id===id);if(!s)return;const old=s.name;s.name=name;
+ trains.forEach(t=>t.points.forEach(p=>{if(p.station===old)p.station=name}));
+ renderDiagram();
+}
+function addStation(){
+ const name=$('newStation').value.trim();if(!name)return;
+ if(stations.some(s=>s.name===name)){alert('同じ駅名は登録できません。');return}
+ stations.push({id:uid(),name});$('newStation').value='';
+ formRows.push(freshRow());
+ render();status(name+'を追加しました。');
+}
+function deleteStation(id){
+ const s=stations.find(x=>x.id===id);if(!s)return;
+ if(!confirm(s.name+'を削除しますか？登録済み列車の該当駅データも削除されます。'))return;
+ const idx=stations.findIndex(x=>x.id===id);stations.splice(idx,1);
+ trains.forEach(t=>t.points=t.points.filter(p=>p.station!==s.name));
+ formRows.splice(idx,1);
+ render();status(s.name+'を削除しました。');
+}
+function moveStation(index,delta){
+ const target=index+delta;if(target<0||target>=stations.length)return;
+ [stations[index],stations[target]]=[stations[target],stations[index]];
+ [formRows[index],formRows[target]]=[formRows[target],formRows[index]];
+ render();
+}
+function renderList(){drawList()}
+function renderDiagram(){
+ const svg=$('diagram'),start=parseTime($('startTime').value),end=parseTime($('endTime').value);
+ if(start==null||end==null||Number.isNaN(start)||Number.isNaN(end)||end<=start){svg.innerHTML='<text x="20" y="35" fill="#a33">表示時刻を確認してください（終了は開始より後）。</text>';return}
+ const W=1100,L=145,R=25,T=45,B=55,ph=Math.max(350,stations.length*58),H=T+ph+B,pw=W-L-R;
+ const x=t=>L+(t-start)/(end-start)*pw,y=i=>T+(stations.length<2?0:i*ph/(stations.length-1));
+ let z='<rect width="'+W+'" height="'+H+'" fill="white"/>';
+ const step=(end-start)>360?60:30;
+ for(let t=Math.ceil(start/step)*step;t<=end;t+=step){const xx=x(t);z+='<line x1="'+xx+'" y1="'+T+'" x2="'+xx+'" y2="'+(T+ph)+'" stroke="#dce3eb"/><text x="'+xx+'" y="'+(T-12)+'" text-anchor="middle" font-size="12" fill="#425466">'+format(t)+'</text>'}
+ stations.forEach((s,i)=>{const yy=y(i);z+='<line x1="'+L+'" y1="'+yy+'" x2="'+(W-R)+'" y2="'+yy+'" stroke="#cbd5df"/><text x="'+(L-12)+'" y="'+(yy+4)+'" text-anchor="end" font-size="12" fill="#24364a">'+escapeXML(s.name)+'</text>'});
+ trains.forEach(t=>{
+  const pts=t.points
+   .map(p=>({p,index:stations.findIndex(s=>s.name===p.station)}))
+   .filter(o=>o.index>=0&&o.p.kind!=='none')
+   .map(o=>{
+    const time=o.p.dep??o.p.arr;
+    return {
+     time:time,
+     x:time!=null?x(time):null,
+     y:y(o.index),
+     kind:o.p.kind,
+     index:o.index
+    };
+   })
+   .filter(p=>p.time!=null&&p.time>=start&&p.time<=end);
+
+  if(pts.length>=2){
+   z+='<polyline points="'+pts.map(p=>p.x+','+p.y).join(' ')+'" fill="none" stroke="'+safeColor(t.color)+'" stroke-width="2.4" stroke-linejoin="round"/>';
+   pts.forEach(p=>{if(p.kind==='pass')z+='<path d="M '+(p.x-4)+' '+(p.y-4)+' L '+(p.x+4)+' '+(p.y+4)+' M '+(p.x-4)+' '+(p.y+4)+' L '+(p.x+4)+' '+(p.y-4)+'" stroke="'+safeColor(t.color)+'" stroke-width="2"/>';else z+='<circle cx="'+p.x+'" cy="'+p.y+'" r="3" fill="'+safeColor(t.color)+'"/>'});
+   const last=pts[pts.length-1];
+   const labelX=Math.min(W-R-10,Math.max(L+5,last.x+7));
+   const textAnchor=last.x+70>W-R?'end':'start';
+   const adjustedX=textAnchor==='end'?Math.min(W-R-5,last.x-7):labelX;
+   z+='<text x="'+adjustedX+'" y="'+(last.y-7)+'" text-anchor="'+textAnchor+'" font-size="11" fill="'+safeColor(t.color)+'">'+escapeXML(t.name)+'</text>';
+  }
+ });
+ svg.setAttribute('viewBox','0 0 '+W+' '+H);svg.setAttribute('width',W);svg.setAttribute('height',H);svg.innerHTML=z;
+ const legend=$('legend');legend.replaceChildren();trains.forEach(t=>{const s=document.createElement('span'),i=document.createElement('i');i.className='swatch';i.style.background=safeColor(t.color);s.append(i,document.createTextNode((t.type?'['+t.type+'] ':'')+t.name));legend.append(s)});
+}
+function safeColor(c){return /^#[0-9a-f]{6}$/i.test(c||'')?c:'#1769aa'}
+function escapeXML(v){return String(v).replace(/[<>&"']/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[c]))}
+function render(){drawList();drawTable();renderDiagram()}
+function showTab(which){const tt=which==='timetable';$('timetablePane').hidden=!tt;$('diagramPane').hidden=tt;$('tabTimetable').className=tt?'active':'secondary';$('tabDiagram').className=tt?'secondary':'active';if(!tt)renderDiagram()}
+function exportJSON(){
+ const data={version:3,stations:stations.map(s=>({name:s.name})),trains:trains.map(t=>({id:t.id,name:t.name,type:t.type,color:t.color,points:t.points.map(p=>({station:p.station,arr:p.arr,dep:p.dep,kind:p.kind}))}))};
+ download(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),'railway-diagram-v3.json');
+}
+function normalizeLoaded(d){
+ if(!d||!Array.isArray(d.stations)||!Array.isArray(d.trains))throw Error('JSONの形式が違います。');
+ const ss=d.stations.map(s=>({id:uid(),name:String(typeof s==='string'?s:(s.name??'' )).trim()}));
+ if(ss.some(s=>!s.name))throw Error('駅名が空欄のデータがあります。');
+ if(new Set(ss.map(s=>s.name)).size!==ss.length)throw Error('駅名が重複しています。');
+ const ts=d.trains.map(t=>{
+  let points=[];
+  if(Array.isArray(t.points)){
+   points=ss.map(s=>{
+    const p=t.points.find(p=>p.station===s.name)||{};
+    return {station:s.name,arr:finiteOrNull(p.arr),dep:finiteOrNull(p.dep),kind:['none','stop','pass'].includes(p.kind)?p.kind:'stop'};
+   });
+  }else{
+
+   points=ss.map(s=>{
+    const v=t.stops?.[s.name]??t.stops?.[s.name+',路線未設定']??null;
+    const n=typeof v==='string'?parseTime(v):v;
+    return {station:s.name,arr:null,dep:finiteOrNull(n),kind:n==null?'none':'stop'};
+   });
+  }
+  return {id:uid(),name:String(t.name||'無名列車'),type:String(t.type||''),color:safeColor(t.color),points};
+ });
+ return {stations:ss,trains:ts};
+}
+function finiteOrNull(v){return typeof v==='number'&&Number.isFinite(v)?v:null}
+async function loadJSON(e){
+ const f=e.target.files[0];if(!f)return;
+ try{const d=JSON.parse(await f.text()),n=normalizeLoaded(d);stations=n.stations;trains=n.trains;resetForm();render();status('JSONを読み込みました（Ver.1/2形式を含む）。')}
+ catch(err){alert('読み込み失敗：'+err.message)}e.target.value='';
+}
+function exportCSV(){
+ const rows=[['列車名','種別','駅名','着時刻','発時刻','扱い']];
+ trains.forEach(t=>t.points.forEach(p=>rows.push([t.name,t.type,p.station,p.arr==null?'':format(p.arr),p.dep==null?'':format(p.dep),p.kind])));
+ const csv='﻿'+rows.map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('
+');
+ download(new Blob([csv],{type:'text/csv;charset=utf-8'}),'railway-diagram-v3.csv');
+}
+function exportSVG(){
+ const c=$('diagram').cloneNode(true);c.setAttribute('xmlns',NS);
+ download(new Blob([new XMLSerializer().serializeToString(c)],{type:'image/svg+xml;charset=utf-8'}),'railway-diagram-v3.svg');
+}
+function exportPNG(){
+ const src=new XMLSerializer().serializeToString($('diagram')),u=URL.createObjectURL(new Blob([src],{type:'image/svg+xml;charset=utf-8'})),img=new Image();
+ img.onload=()=>{const c=document.createElement('canvas');c.width=img.width*2;c.height=img.height*2;const ctx=c.getContext('2d');ctx.scale(2,2);ctx.fillStyle='white';ctx.fillRect(0,0,img.width,img.height);ctx.drawImage(img,0,0);URL.revokeObjectURL(u);c.toBlob(b=>{if(b)download(b,'railway-diagram-v3.png');else alert('PNG変換に失敗しました。')})};
+ img.onerror=()=>{URL.revokeObjectURL(u);alert('PNG変換に失敗しました。SVG保存をお試しください。')};img.src=u;
+}
+$('addStation').onclick=addStation;$('newStation').addEventListener('keydown',e=>{if(e.key==='Enter')addStation()});
+$('newTrain').onclick=()=>{resetForm();status('新しい列車を入力できます。')};
+$('saveTrain').onclick=saveTrain;$('cancelEdit').onclick=()=>{resetForm();status('編集を取り消しました。')};
+$('fillDemo').onclick=()=>{formRows=stations.map((s,i)=>({arr:format(8*60+i*8),dep:format(8*60+2+i*8),kind:i===2?'pass':'stop'}));drawTable()};
+$('clearTimes').onclick=()=>{makeRows();status('時刻欄をクリアしました。')};
+$('tabTimetable').onclick=()=>showTab('timetable');$('tabDiagram').onclick=()=>showTab('diagram');$('redraw').onclick=renderDiagram;
+$('saveJson').onclick=exportJSON;$('loadJson').onclick=()=>$('jsonFile').click();$('jsonFile').onchange=loadJSON;
+$('saveSvg').onclick=exportSVG;$('saveCsv').onclick=exportCSV;$('savePng').onclick=exportPNG;
+
+// 初期サンプル
+stations=['大阪','新大阪','茨木','高槻','京都','山科','堅田'].map(name=>({id:uid(),name}));
+formRows=stations.map((s,i)=>({arr:format(8*60+i*8),dep:format(8*60+2+i*8),kind:i===2?'pass':'stop'}));
+trains=[{id:uid(),name:'新快速 1号',type:'新快速',color:'#1769aa',points:stations.map((s,i)=>({station:s.name,arr:i===2?null:480+i*8,dep:482+i*8,kind:i===2?'pass':'stop'}))}];
+drawList();drawTable();renderDiagram();
+// 内部開発ver 3.0
+})();
+</script>
+</body>
+</html>
