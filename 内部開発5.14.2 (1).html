@@ -1,0 +1,833 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>鉄道ダイヤグラム作成ツール</title>
+<style>
+:root{--bg:#f2f5f8;--panel:#fff;--text:#1d2b3a;--sub:#5b6c7e;--border:#d9e1e9;--hdr-bg:#17324d;--hdr-text:#fff;--hdr-sub:#d7e3ef;--in-bg:#fff;--in-border:#c9d3de;--th-bg:#edf2f7;--sticky-bg:#f8fafc;--sec-bg:#e8eef5;--sec-text:#24384b;--card:#f5f8fb;--sel-bg:#e0f2fe;--sel-border:#38bdf8;--svg-bg:#fff;--accent:#1769aa;--stop-bg:#eef6ff;--pass-bg:#fff4e6;--none-bg:#fafbfd;--seg-bg:#e9eff5;--pass:#e67e22}
+[data-theme="dark"]{--bg:#121820;--panel:#1a232e;--text:#e2e8f0;--sub:#94a3b8;--border:#2e3d4e;--hdr-bg:#0f172a;--hdr-text:#f8fafc;--hdr-sub:#94a3b8;--in-bg:#0f172a;--in-border:#334155;--th-bg:#1e293b;--sticky-bg:#0f172a;--sec-bg:#334155;--sec-text:#f8fafc;--card:#0f172a;--sel-bg:#1e3a5f;--sel-border:#38bdf8;--svg-bg:#0f172a;--accent:#38bdf8;--stop-bg:#16283d;--pass-bg:#2c1d11;--none-bg:#151d26;--seg-bg:#0f172a;--pass:#f59e0b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);transition:background .2s,color .2s}
+header{background:var(--hdr-bg);color:var(--hdr-text);padding:17px 22px;display:flex;justify-content:space-between;align-items:center}
+header h1{margin:0 0 4px;font-size:1.3rem}
+main{max-width:1600px;margin:auto;padding:14px;display:grid;grid-template-columns:360px minmax(0,1fr);gap:14px}
+.panel,.work{background:var(--panel);border:1px solid var(--border);border-radius:11px;padding:14px;min-width:0}
+h2{font-size:1rem;margin:0 0 10px}
+label{display:block;font-size:.82rem;font-weight:650;margin:8px 0 4px}
+input,select{font:inherit;border:1px solid var(--in-border);border-radius:6px;padding:8px;background:var(--in-bg);color:var(--text);max-width:100%;width:100%}
+input[type=color]{height:38px;padding:3px}
+input[type=checkbox]{width:auto;cursor:pointer;margin:0}
+button{font:inherit;font-weight:650;border:0;border-radius:7px;padding:8px 10px;background:#1769aa;color:#fff;cursor:pointer}
+button.secondary{background:var(--sec-bg);color:var(--sec-text)}
+button.danger{background:#a83a3a}
+button:disabled{opacity:.45;cursor:not-allowed}
+.theme-btn{background:transparent;border:1px solid var(--hdr-sub);color:var(--hdr-text);padding:6px 12px;border-radius:20px;font-size:.82rem;cursor:pointer}
+.row{display:flex;gap:8px}.row>*{flex:1;min-width:0}
+.section{border-bottom:1px solid var(--border);padding-bottom:13px;margin-bottom:13px}
+.hint{font-size:.77rem;color:var(--sub);line-height:1.55}
+.actions{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px}
+#status{font-size:.8rem;min-height:1.4em;margin-top:7px;color:#17623c}[data-theme="dark"] #status{color:#4ade80}
+.table-wrap{overflow:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--border);border-radius:8px;max-height:65vh}
+table{border-collapse:collapse;width:100%;min-width:650px;font-size:.83rem}
+th,td{border-bottom:1px solid var(--border);border-right:1px solid var(--border);padding:5px 7px;text-align:center;white-space:nowrap}
+th{position:sticky;top:0;background:var(--th-bg);z-index:1;font-weight:700}
+td:first-child,th:first-child{text-align:left;position:sticky;left:0;background:var(--sticky-bg);z-index:2}th:first-child{z-index:3}
+td input{min-width:78px;padding:6px 5px;font-size:.82rem}
+td .time{width:86px;text-align:center;font-variant-numeric:tabular-nums}
+td .time:disabled{opacity:.45;cursor:not-allowed;background:var(--sticky-bg)}
+#timeTable tbody tr.kind-stop,#timeTable tbody tr.kind-stop td:first-child{background:var(--stop-bg)}
+#timeTable tbody tr.kind-pass,#timeTable tbody tr.kind-pass td:first-child{background:var(--pass-bg)}
+#timeTable tbody tr.kind-none,#timeTable tbody tr.kind-none td:first-child{background:var(--none-bg)}
+#timeTable tbody tr.kind-none .time{opacity:.55}#timeTable tbody tr.kind-none:focus-within .time{opacity:1}
+.kind-seg{display:inline-flex;width:100%;min-width:138px;background:var(--seg-bg);border:1px solid var(--border);border-radius:7px;padding:2px;gap:2px}
+.kind-seg button{flex:1;padding:5px 4px;font-size:.74rem;font-weight:700;border-radius:5px;background:transparent;color:var(--sub);line-height:1.15;white-space:nowrap}
+.kind-seg button.active[data-kind="stop"]{background:var(--accent);color:#fff}[data-theme="dark"] .kind-seg button.active[data-kind="stop"]{color:#0f172a}
+.kind-seg button.active[data-kind="pass"]{background:var(--pass);color:#fff}[data-theme="dark"] .kind-seg button.active[data-kind="pass"]{color:#0f172a}
+.kind-seg button.active[data-kind="none"]{background:var(--panel);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.mob-only{display:none !important}
+.tt-header{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}.tt-header h2{margin:0}.tt-tools{gap:6px;flex-wrap:wrap}
+.tt-mode-btn{padding:5px 10px;font-size:.76rem;border-radius:6px;border:1px solid var(--border);background:var(--sec-bg);color:var(--sec-text)}
+.tt-mode-btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}[data-theme="dark"] .tt-mode-btn.active{color:#0f172a}
+.train-card{padding:8px;background:var(--card);border-radius:7px;margin:6px 0;font-size:.82rem;display:flex;flex-direction:column;gap:6px;border:1px solid var(--border);transition:background .15s,border-color .15s}
+.train-card.selected{background:var(--sel-bg);border-color:var(--sel-border)}
+.train-card-top{display:flex;justify-content:space-between;align-items:center;gap:6px}
+.train-card-bottom{display:flex;justify-content:flex-end;align-items:center;gap:4px;border-top:1px dashed var(--border);padding-top:5px}
+.train-card button,.bulk-bar button,.proj-card-actions button,.station-tools button{padding:4px 7px;font-size:.74rem}
+.train-card button{padding:3px 7px}
+.train-card .name{min-width:0;overflow-wrap:anywhere;display:flex;align-items:center;gap:6px;font-weight:600}
+.vis-label{display:inline-flex;align-items:center;gap:3px;font-size:.74rem;color:var(--sub);cursor:pointer;margin:0;flex-shrink:0;user-select:none}
+.bulk-bar{background:var(--sel-bg);border:1px solid var(--sel-border);padding:8px;border-radius:7px;margin-bottom:8px;display:flex;flex-wrap:wrap;gap:5px;align-items:center;justify-content:space-between;font-size:.78rem}
+.bulk-bar[hidden]{display:none}
+.proj-toggle{width:100%;display:flex;justify-content:space-between;align-items:center;background:var(--card);color:var(--text);border:1px solid var(--border);padding:9px 11px;border-radius:8px;font-size:.84rem;text-align:left;gap:6px}
+.proj-toggle:hover{border-color:var(--accent)}
+.proj-toggle-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700}
+.proj-drawer{margin-top:9px;display:flex;flex-direction:column;gap:7px}.proj-drawer[hidden]{display:none}
+.proj-new-btn{width:100%;background:transparent;color:var(--text);border:1.5px dashed var(--in-border);padding:9px;border-radius:8px;font-size:.82rem;text-align:center}
+.proj-new-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--card)}
+.proj-list{max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding-right:2px}
+.proj-card{padding:9px;background:var(--card);border:1px solid var(--border);border-radius:8px;font-size:.8rem;display:flex;flex-direction:column;gap:5px}
+.proj-card.active{background:var(--sel-bg);border-color:var(--sel-border)}
+.proj-card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:6px}
+.proj-card-title{font-weight:700;word-break:break-word;line-height:1.35}
+.proj-card-date{font-size:.72rem;color:var(--sub);white-space:nowrap;flex-shrink:0}
+.proj-card-meta{font-size:.74rem;color:var(--sub)}
+.proj-card-actions{display:flex;align-items:center;gap:6px;border-top:1px dashed var(--border);padding-top:6px;margin-top:2px}
+.proj-active-badge{font-size:.72rem;font-weight:700;color:var(--accent);padding:3px 6px}
+#diagramWrap{overflow:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--border);border-radius:8px}
+#diagram{display:block;min-width:700px;width:100%;height:auto;background:var(--svg-bg)}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.tabs button.active{background:#17324d;color:#fff}[data-theme="dark"] .tabs button.active{background:#38bdf8;color:#0f172a}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:.78rem;margin-top:9px}
+.swatch{width:18px;height:3px;display:inline-block;vertical-align:middle;margin-right:5px}
+.station-tools{display:flex;gap:4px;align-items:center}
+.chk-label{display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-size:.82rem;font-weight:650}
+footer{text-align:center;padding:20px 14px;font-size:.85rem;color:var(--sub);background:var(--panel);border-top:1px solid var(--border);margin-top:20px}
+footer a{color:var(--accent);text-decoration:none}footer a:hover{text-decoration:underline}
+.mobile-nav{display:none;position:fixed;bottom:0;left:0;right:0;z-index:100;background:var(--panel);border-top:1px solid var(--border);box-shadow:0 -2px 10px rgba(0,0,0,.08);padding:4px 4px calc(4px + env(safe-area-inset-bottom))}
+.mobile-nav button{flex:1;background:transparent;color:var(--sub);border-radius:8px;padding:6px 2px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:.71rem;font-weight:600;line-height:1.2}
+.mobile-nav button .mob-ico{font-size:1.15rem;line-height:1}
+.mobile-nav button.active{color:var(--accent);background:var(--sel-bg);font-weight:700}
+@media(max-width:950px){main{grid-template-columns:1fr;padding:9px}header{padding:14px;flex-direction:column;gap:10px;text-align:center}}
+@media(max-width:768px){
+  body{padding-bottom:76px}.mobile-nav{display:flex}.work>.tabs{display:none}.mob-only{display:inline-flex !important}
+  body[data-mob-view="settings"] [data-mob-tab]:not([data-mob-tab="settings"]),body[data-mob-view="input"] [data-mob-tab]:not([data-mob-tab="input"]),body[data-mob-view="list"] [data-mob-tab]:not([data-mob-tab="list"]),body[data-mob-view="diagram"] [data-mob-tab]:not([data-mob-tab="diagram"]),body[data-mob-view="settings"] .work,body[data-mob-view="list"] .work,body[data-mob-view="diagram"] .panel{display:none !important}
+  body[data-mob-view="input"] #timetablePane,body[data-mob-view="diagram"] #diagramPane{display:block !important}
+  body[data-mob-view="input"] .panel .section[data-mob-tab="input"]{border-bottom:none;padding-bottom:0;margin-bottom:0}
+  input,select{font-size:16px !important}
+  #timeTable:not(.mob-edit-stations){min-width:0;table-layout:fixed}
+  #timeTable:not(.mob-edit-stations) th:nth-child(1),#timeTable:not(.mob-edit-stations) td:nth-child(1){width:28%;white-space:normal;position:static}
+  #timeTable:not(.mob-edit-stations) th:nth-child(2),#timeTable:not(.mob-edit-stations) td:nth-child(2){width:21%}
+  #timeTable:not(.mob-edit-stations) th:nth-child(3),#timeTable:not(.mob-edit-stations) td:nth-child(3){width:21%}
+  #timeTable:not(.mob-edit-stations) th:nth-child(4),#timeTable:not(.mob-edit-stations) td:nth-child(4){width:30%}
+  #timeTable:not(.mob-edit-stations) .col-st-ops{display:none}
+  #timeTable th,#timeTable td{padding:5px 3px}#timeTable td:first-child,#timeTable th:first-child{padding-left:6px}
+  #timeTable tbody tr.kind-none .st-mob-label{color:var(--sub);font-weight:500}
+  .st-mob-label{display:block;font-weight:700;font-size:.8rem;line-height:1.25;word-break:break-all}
+  td input{min-width:0;font-size:16px !important;padding:6px 4px}
+  td .time{width:100%;max-width:74px;padding:6px 2px;font-weight:600}
+  td .time::placeholder{font-size:12px;opacity:.45}
+  td .time:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px rgba(23,105,170,.22)}
+  td .time:disabled{background:transparent;border-color:transparent}
+  .kind-seg{min-width:0}
+  .kind-seg button{padding:6px 1px;font-size:.7rem}
+  .table-wrap{max-height:56vh}
+}
+</style>
+</head>
+<body data-mob-view="settings">
+<header>
+  <div><h1>鉄道ダイヤグラム作成ツール</h1></div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <a href="https://203kei.github.io/railway-diagram-help/" target="_blank" rel="noopener noreferrer" class="theme-btn" style="text-decoration:none">❓ ヘルプ</a>
+    <button id="toggleTheme" class="theme-btn">🌙 ダークモード</button>
+  </div>
+</header>
+<main>
+<aside class="panel">
+  <div class="section" data-mob-tab="settings">
+    <button id="toggleProjects" class="proj-toggle" type="button" aria-expanded="false">
+      <span class="proj-toggle-title" id="currentProjLabel">📁 プロジェクト：路線ダイヤグラム</span>
+      <span id="projArrow" style="flex-shrink:0;font-size:.78rem">▼</span>
+    </button>
+    <div id="projDrawer" class="proj-drawer" hidden>
+      <button id="newProjectBtn" class="proj-new-btn" type="button">＋ 新規プロジェクト</button>
+      <div id="projectList" class="proj-list"></div>
+      <p class="hint" style="margin:0">基本、作業内容はブラウザに自動保存されます。</p>
+    </div>
+  </div>
+  <div class="section" data-mob-tab="settings">
+    <h2>0. 全体設定</h2>
+    <label for="diagramTitle">ダイヤグラムのタイトル</label>
+    <input id="diagramTitle" placeholder="例：〇〇線 平日基本ダイヤ" value="路線ダイヤグラム">
+  </div>
+  <div class="section" data-mob-tab="settings">
+    <h2>1. 駅の管理</h2>
+    <label for="newStation">駅名</label>
+    <div class="row"><input id="newStation" placeholder="例：大阪"><button id="addStation">駅を追加</button></div>
+    <div style="margin-top:8px"><button id="reverseStations" class="secondary" style="width:100%">上下線の駅順を入れ替える</button></div>
+    <p class="hint">駅名変更は時刻表の左端から直接編集できます。上下ボタンで駅順を変更できます。</p>
+  </div>
+  <div class="section" data-mob-tab="input">
+    <h2>2. 列車の設定</h2>
+    <label for="trainName">列車番号・列車名</label><input id="trainName" placeholder="例：新快速 1234M">
+    <div class="row">
+      <div><label for="trainType">種別</label><input id="trainType" placeholder="新快速"></div>
+      <div><label for="trainColor">スジの色</label><input id="trainColor" type="color" value="#1769aa"></div>
+    </div>
+    <div style="margin-top:8px"><label class="chk-label"><input id="trainVisible" type="checkbox" checked> スジ（線）を表示する</label></div>
+    <div class="actions"><button id="newTrain" class="secondary">新規列車入力</button><button id="saveTrain">列車を追加</button><button id="cancelEdit" class="secondary" hidden>編集取消</button></div>
+    <div id="status" role="status"></div>
+  </div>
+  <div class="section" data-mob-tab="list">
+    <h2>3. 登録済みの列車</h2>
+    <div class="actions" style="margin-bottom:8px">
+      <button id="toggleSelectAll" class="secondary" style="padding:4px 8px;font-size:.75rem">全選択 / 解除</button>
+      <button id="sortTrainByTime" class="secondary" style="padding:4px 8px;font-size:.75rem">時刻順にソート</button>
+    </div>
+    <div id="bulkBar" class="bulk-bar" hidden>
+      <span id="selectedCount" style="font-weight:bold">0件選択中</span>
+      <div style="display:flex;gap:4px;flex-wrap:wrap">
+        <button id="bulkMoveUp" class="secondary" title="選択列車を上に移動">▲ 上へ</button>
+        <button id="bulkMoveDown" class="secondary" title="選択列車を下に移動">▼ 下へ</button>
+        <button id="bulkDuplicate" class="secondary" title="設定した時間ずらして一括複製">一括複製</button>
+        <button id="bulkDelete" class="danger" title="選択列車をまとめて削除">一括削除</button>
+      </div>
+    </div>
+    <div id="trainList"></div>
+  </div>
+  <div data-mob-tab="list">
+    <h2>4. 時間をずらして複製</h2>
+    <label for="shiftValue">ずらす時間</label>
+    <div class="row"><input id="shiftValue" type="number" inputmode="numeric" value="30" step="1"><select id="shiftUnit"><option value="1">分</option><option value="60">時間</option></select></div>
+    <p class="hint">個別複製や一括複製時にこの時間分ずらします。日付跨ぎ（25:30等）にも対応しています。</p>
+  </div>
+</aside>
+<section class="work">
+  <div class="tabs"><button id="tabTimetable" class="active">時刻表入力</button><button id="tabDiagram" class="secondary">ダイヤグラム</button></div>
+  <section id="timetablePane" data-mob-tab="input">
+    <div class="tt-header">
+      <h2>駅別時刻表</h2>
+      <div class="tt-tools mob-only">
+        <button id="mobReverseStations" type="button" class="tt-mode-btn" title="上下線の駅順を入れ替える">⇅ 上下線入替</button>
+        <button id="toggleMobStationEdit" type="button" class="tt-mode-btn">⚙️ 駅順・駅名編集</button>
+      </div>
+    </div>
+    <p class="hint">駅ごとの着時刻・発時刻・停車/通過/なしを入力します。下り・上りどちらも時刻の早い順（出発駅から到着駅へ）に入力してください。時刻は4桁入力（例：0625）。翌日は24時以降（例：2530）、前日はマイナス（例：-0030）として入力してください。</p>
+    <div class="table-wrap"><table id="timeTable"><thead><tr><th>駅名</th><th>着時刻</th><th>発時刻</th><th>扱い</th><th class="col-st-ops">駅操作</th></tr></thead><tbody></tbody></table></div>
+    <div class="actions">
+      <button id="saveTrainBottom" class="mob-only">列車を追加</button>
+      <button id="fillDemo" class="secondary">サンプル時刻を入力</button>
+      <button id="clearTimes" class="secondary">時刻をクリア</button>
+    </div>
+  </section>
+  <section id="diagramPane" data-mob-tab="diagram" hidden>
+    <div class="row" style="align-items:end;flex-wrap:wrap">
+      <div><h2>ダイヤグラム</h2><small class="hint">横軸：時刻 ／ 縦軸：駅</small></div>
+      <div><label for="startTime">表示開始</label><input id="startTime" type="text" inputmode="tel" value="0500" maxlength="8"></div>
+      <div><label for="endTime">表示終了</label><input id="endTime" type="text" inputmode="tel" value="2400" maxlength="8"></div>
+      <div style="flex:0 0 auto"><button id="redraw" class="secondary">更新</button></div>
+    </div>
+    <div class="actions">
+      <button id="saveJson">JSON保存</button><button id="loadJson" class="secondary">JSON読み込み</button><input id="jsonFile" type="file" accept=".json,application/json" hidden>
+      <button id="saveSvg" class="secondary">SVG保存</button><button id="saveCsv" class="secondary">CSV保存</button><button id="savePng" class="secondary">PNG保存</button>
+    </div>
+    <div id="diagramWrap"><svg id="diagram" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="鉄道ダイヤグラム"></svg></div>
+    <div id="legend" class="legend"></div>
+  </section>
+</section>
+</main>
+<nav id="mobileNav" class="mobile-nav" aria-label="モバイル表示切り替え">
+  <button type="button" data-mob-target="settings" class="active" aria-current="page"><span class="mob-ico">⚙️</span><span>駅・設定</span></button>
+  <button type="button" data-mob-target="input" aria-current="false"><span class="mob-ico">🕒</span><span>列車・時刻</span></button>
+  <button type="button" data-mob-target="list" aria-current="false"><span class="mob-ico">🚃</span><span>列車一覧</span></button>
+  <button type="button" data-mob-target="diagram" aria-current="false"><span class="mob-ico">📈</span><span>ダイヤ</span></button>
+</nav>
+<footer><p>制作 203kei｜ 制作者Twitter: <a href="https://twitter.com/203kei_tetudou" target="_blank" rel="noopener noreferrer">https://twitter.com/203kei_tetudou</a></p><p>ver.5.14.2</p></footer>
+<script>
+(()=>{
+'use strict';
+const VER='5.14.2';
+const $=id=>document.getElementById(id),NS='http://www.w3.org/2000/svg';
+const STORAGE_KEY='railway_diagram_projects_v5';
+let stations=[],trains=[],editingId=null,formRows=[],isReversed=false,theme='light';
+let selectedTrainIds=new Set(),projects=[],activeProjectId=null;
+let mobStationEditMode=false,lastIsMob=window.innerWidth<=768;
+
+const isMob=()=>window.innerWidth<=768;
+function uid(){return 'v5_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,9)}
+function todayStr(){const d=new Date();return d.getFullYear()+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+String(d.getDate()).padStart(2,'0')}
+
+function el(tag,props,...children){
+ const e=document.createElement(tag);
+ if(props)for(const[k,v]of Object.entries(props)){
+  if(v==null||v===false)continue;
+  if(k==='class')e.className=v;
+  else if(k==='dataset')Object.assign(e.dataset,v);
+  else if(k==='style')e.style.cssText=v;
+  else if(k.startsWith('on'))e[k]=v;
+  else if(k in e&&k!=='list')e[k]=v;
+  else e.setAttribute(k,v);
+ }
+ for(const c of children)if(c!=null&&c!==false)e.append(c);
+ return e;
+}
+
+function applyTheme(t){
+ if(t!=='dark'&&t!=='light')return;
+ theme=t;
+ document.documentElement.setAttribute('data-theme',theme);
+ $('toggleTheme').textContent=theme==='dark'?'☀️ ライトモード':'🌙 ダークモード';
+}
+
+function writeStorage(){localStorage.setItem(STORAGE_KEY,JSON.stringify({activeId:activeProjectId,theme,projects}))}
+
+function saveToStorage(){
+ try{
+  if(!activeProjectId)return;
+  const idx=projects.findIndex(p=>p.id===activeProjectId);
+  const snapshot={
+   id:activeProjectId,title:$('diagramTitle').value,updatedAt:todayStr(),isReversed,
+   startTime:$('startTime').value,endTime:$('endTime').value,
+   stations:stations.map(s=>({id:s.id,name:s.name})),
+   trains:trains.map(t=>({id:t.id,name:t.name,type:t.type,color:t.color,visible:t.visible!==false,points:t.points.map(p=>({station:p.station,arr:p.arr,dep:p.dep,kind:p.kind}))}))
+  };
+  if(idx>=0)projects[idx]=snapshot;else projects.unshift(snapshot);
+  writeStorage();drawProjectList();
+ }catch(e){console.warn('localStorage保存エラー:',e)}
+}
+
+function commit(msg,bad=false){render();saveToStorage();if(msg)status(msg,bad)}
+
+function loadFromStorage(){
+ try{
+  const parsed=JSON.parse(localStorage.getItem(STORAGE_KEY)||'null');
+  if(!parsed||!Array.isArray(parsed.projects)||!parsed.projects.length)return false;
+  projects=parsed.projects;
+  applyTheme(parsed.theme);
+  applyProjectData(projects.find(p=>p.id===parsed.activeId)||projects[0]);
+  return true;
+ }catch(e){console.warn('localStorage読み込みエラー:',e);return false}
+}
+
+function applyProjectData(p){
+ activeProjectId=p.id;
+ $('diagramTitle').value=p.title||'路線ダイヤグラム';
+ isReversed=!!p.isReversed;
+ $('startTime').value=p.startTime||'0500';
+ $('endTime').value=p.endTime||'2400';
+ stations=Array.isArray(p.stations)?p.stations.map(s=>({id:s.id||uid(),name:s.name})):[];
+ trains=Array.isArray(p.trains)?p.trains.map(t=>({
+  id:t.id||uid(),name:t.name,type:t.type||'',color:safeColor(t.color),visible:t.visible!==false,
+  points:Array.isArray(t.points)?t.points.map(pt=>({...pt})):[]
+ })):[];
+ selectedTrainIds.clear();resetForm();drawProjectList();
+}
+
+function switchProject(id){
+ if(id===activeProjectId)return;
+ saveToStorage();
+ const target=projects.find(p=>p.id===id);
+ if(!target)return;
+ applyProjectData(target);render();
+ status('プロジェクト「'+(target.title||'無題')+'」を開きました。');
+}
+
+function createNewProject(){
+ saveToStorage();
+ const newProj={
+  id:uid(),title:'新規路線ダイヤグラム',updatedAt:todayStr(),isReversed:false,
+  startTime:'0500',endTime:'2400',
+  stations:[{id:uid(),name:'始発駅'},{id:uid(),name:'終着駅'}],trains:[]
+ };
+ projects.unshift(newProj);applyProjectData(newProj);render();
+ status('新しいプロジェクトを作成しました。');
+}
+
+function deleteProject(id){
+ const target=projects.find(p=>p.id===id);
+ if(!target)return;
+ if(projects.length<=1){alert('[E1003] 最後のプロジェクトは削除できません。「＋ 新規プロジェクト」を作成してから削除してください。');return}
+ if(!confirm('プロジェクト「'+(target.title||'無題')+'」を削除しますか？'))return;
+ projects=projects.filter(p=>p.id!==id);
+ if(activeProjectId===id){applyProjectData(projects[0]);render()}else drawProjectList();
+ writeStorage();status('プロジェクトを削除しました。');
+}
+
+function drawProjectList(){
+ const curTitle=($('diagramTitle').value||'').trim()||'無題のプロジェクト';
+ $('currentProjLabel').textContent='📁 プロジェクト：'+curTitle;
+ $('projectList').replaceChildren(...projects.map(p=>{
+  const act=p.id===activeProjectId;
+  const stCount=act?stations.length:(p.stations?p.stations.length:0);
+  const trCount=act?trains.length:(p.trains?p.trains.length:0);
+  return el('div',{class:'proj-card'+(act?' active':'')},
+   el('div',{class:'proj-card-head'},
+    el('span',{class:'proj-card-title'},act?curTitle:(p.title||'無題のプロジェクト')),
+    el('span',{class:'proj-card-date'},p.updatedAt||todayStr())
+   ),
+   el('div',{class:'proj-card-meta'},'駅数: '+stCount+'駅 ／ 列車数: '+trCount+'本'),
+   el('div',{class:'proj-card-actions'},
+    act?el('span',{class:'proj-active-badge'},'● 編集中'):el('button',{type:'button',onclick:()=>switchProject(p.id)},'開く'),
+    el('button',{type:'button',class:'secondary',style:'margin-left:auto',onclick:()=>deleteProject(p.id)},'削除')
+   )
+  );
+ }));
+}
+
+function parseTime(v){
+ if(v==null||String(v).trim()==='')return null;
+ let s=String(v).trim().replace(':',''),neg=false;
+ if(s.startsWith('-')){neg=true;s=s.slice(1)}
+ if(!/^\d{1,5}$/.test(s))return NaN;
+ const p=s.padStart(4,'0'),h=Number(p.slice(0,p.length-2)),m=Number(p.slice(p.length-2));
+ if(m>=60)return NaN;
+ const total=h*60+m;
+ return neg?-total:total;
+}
+
+function format(n){
+ if(n==null)return '';
+ const neg=n<0,a=Math.abs(n);
+ return (neg?'-':'')+String(Math.floor(a/60)).padStart(2,'0')+':'+String(a%60).padStart(2,'0');
+}
+
+function inputFormat(v){const n=parseTime(v);return Number.isNaN(n)?v:n==null?'':format(n)}
+function download(blob,name){const u=URL.createObjectURL(blob),a=el('a',{href:u,download:name});document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),1200)}
+function status(s,bad=false){$('status').textContent=s;$('status').style.color=bad?(theme==='dark'?'#f87171':'#a33'):(theme==='dark'?'#4ade80':'#17623c')}
+function freshRow(){return {arr:'',dep:'',kind:'none'}}
+function makeRows(){formRows=stations.map(freshRow);drawTable()}
+function syncSaveBtnLabel(){const l=editingId?'変更を保存':'列車を追加';$('saveTrain').textContent=l;$('saveTrainBottom').textContent=l}
+function resetForm(){editingId=null;$('trainName').value='';$('trainType').value='';$('trainColor').value='#1769aa';$('trainVisible').checked=true;makeRows();syncSaveBtnLabel();$('cancelEdit').hidden=true}
+
+function rowToMinutes(r){
+ const a=parseTime(r.arr),d=parseTime(r.dep);
+ if(Number.isNaN(a)||Number.isNaN(d))return {error:true};
+ if(r.kind==='none')return {arr:null,dep:null,kind:'none'};
+ if(r.kind==='pass'){const t=d??a;return {arr:t,dep:t,kind:'pass'}}
+ if(a==null&&d==null)return {error:true};
+ return {arr:a??d,dep:d??a,kind:'stop'};
+}
+
+function saveTrain(){
+ const name=$('trainName').value.trim();if(!name){status('[E2001] 列車番号・列車名を入力してください。',true);return}
+ const points=formRows.map((r,i)=>({station:stations[i].name,...rowToMinutes(r)}));
+ if(points.some(p=>p.error)){status('[E2002] 時刻を正しい形式で入力してください。',true);return}
+ if(points.filter(p=>p.kind!=='none'&&(p.arr!=null||p.dep!=null)).length<2){status('[E2003] 時刻が入力されている駅が2駅以上必要です。',true);return}
+ const wasEdit=!!editingId;
+ const t={id:editingId||uid(),name,type:$('trainType').value.trim(),color:$('trainColor').value,visible:$('trainVisible').checked,points};
+ if(editingId)trains=trains.map(x=>x.id===editingId?t:x);else trains.push(t);
+ resetForm();commit(wasEdit?'列車を更新しました。':'列車を追加しました。');
+}
+
+function editTrain(id){
+ const t=trains.find(x=>x.id===id);if(!t)return;
+ editingId=id;$('trainName').value=t.name;$('trainType').value=t.type||'';$('trainColor').value=t.color||'#1769aa';$('trainVisible').checked=t.visible!==false;
+ formRows=stations.map(s=>{
+  const p=t.points.find(p=>p.station===s.name);
+  if(!p)return freshRow();
+  const kind=p.kind||'stop';
+  if(kind==='pass'){const pt=p.dep??p.arr;return {arr:'',dep:pt==null?'':format(pt),kind:'pass'}}
+  return {arr:p.arr==null?'':format(p.arr),dep:p.dep==null?'':format(p.dep),kind};
+ });
+ drawTable();syncSaveBtnLabel();$('cancelEdit').hidden=false;status('編集中：'+t.name);showTab('timetable');
+ if(isMob())window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function deleteTrain(id){
+ const t=trains.find(x=>x.id===id);if(!t||!confirm(t.name+'を削除しますか？'))return;
+ trains=trains.filter(x=>x.id!==id);selectedTrainIds.delete(id);
+ if(editingId===id)resetForm();commit('列車を削除しました。');
+}
+
+function moveTrain(index,delta){
+ const target=index+delta;if(target<0||target>=trains.length)return;
+ [trains[index],trains[target]]=[trains[target],trains[index]];commit();
+}
+
+function sortTrainByTime(){
+ const firstTime=t=>{
+  const times=t.points.filter(p=>p.kind!=='none').map(p=>p.arr??p.dep).filter(v=>v!=null);
+  return times.length?Math.min(...times):Infinity;
+ };
+ trains.sort((a,b)=>firstTime(a)-firstTime(b));
+ commit('列車を始発時刻順に並び替えました。');
+}
+
+function toggleTrainVisibility(id){
+ const t=trains.find(x=>x.id===id);if(!t)return;
+ t.visible=!(t.visible!==false);commit();
+}
+
+function getShiftMinutes(){
+ const raw=Number($('shiftValue').value),unit=Number($('shiftUnit').value);
+ if(!Number.isFinite(raw)||!Number.isInteger(raw)){alert('[E3001] ずらす時間を整数で入力してください。');return null}
+ return raw*unit;
+}
+
+function shiftClone(t,shift){
+ return {...t,id:uid(),name:t.name+'（複製）',points:t.points.map(p=>({...p,arr:p.arr==null?null:p.arr+shift,dep:p.dep==null?null:p.dep+shift}))};
+}
+
+function duplicateTrain(id){
+ const orig=trains.find(t=>t.id===id);if(!orig)return;
+ const shift=getShiftMinutes();if(shift==null)return;
+ trains.push(shiftClone(orig,shift));
+ commit(orig.name+'を'+(shift>=0?'+':'')+shift+'分ずらして複製しました。');
+}
+
+function toggleSelectTrain(id){
+ if(selectedTrainIds.has(id))selectedTrainIds.delete(id);else selectedTrainIds.add(id);
+ drawList();
+}
+
+function toggleSelectAll(){
+ if(!trains.length)return;
+ if(selectedTrainIds.size===trains.length)selectedTrainIds.clear();
+ else trains.forEach(t=>selectedTrainIds.add(t.id));
+ drawList();
+}
+
+function bulkMoveTrains(delta){
+ if(!selectedTrainIds.size)return;
+ if(delta<0){
+  for(let i=1;i<trains.length;i++)if(selectedTrainIds.has(trains[i].id)&&!selectedTrainIds.has(trains[i-1].id))[trains[i],trains[i-1]]=[trains[i-1],trains[i]];
+ }else{
+  for(let i=trains.length-2;i>=0;i--)if(selectedTrainIds.has(trains[i].id)&&!selectedTrainIds.has(trains[i+1].id))[trains[i],trains[i+1]]=[trains[i+1],trains[i]];
+ }
+ commit();
+}
+
+function bulkDuplicateTrains(){
+ if(!selectedTrainIds.size)return;
+ const shift=getShiftMinutes();if(shift==null)return;
+ const copies=trains.filter(t=>selectedTrainIds.has(t.id)).map(t=>shiftClone(t,shift));
+ trains.push(...copies);
+ commit(copies.length+'件の列車を'+(shift>=0?'+':'')+shift+'分ずらして一括複製しました。');
+}
+
+function bulkDeleteTrains(){
+ const count=selectedTrainIds.size;if(!count)return;
+ if(!confirm('選択した '+count+' 件の列車をまとめて削除しますか？'))return;
+ trains=trains.filter(t=>!selectedTrainIds.has(t.id));
+ if(editingId&&selectedTrainIds.has(editingId))resetForm();
+ selectedTrainIds.clear();commit(count+'件の列車を一括削除しました。');
+}
+
+function drawList(){
+ const list=$('trainList'),validIds=new Set(trains.map(t=>t.id));
+ for(const id of selectedTrainIds)if(!validIds.has(id))selectedTrainIds.delete(id);
+ $('bulkBar').hidden=selectedTrainIds.size===0;
+ if(!$('bulkBar').hidden)$('selectedCount').textContent=selectedTrainIds.size+'件選択中';
+ if(!trains.length){list.replaceChildren('列車はまだありません。');list.className='hint';return}
+ list.className='';
+ list.replaceChildren(...trains.map((t,i)=>{
+  const isSel=selectedTrainIds.has(t.id);
+  return el('div',{class:'train-card'+(isSel?' selected':'')},
+   el('div',{class:'train-card-top'},
+    el('span',{class:'name'},
+     el('input',{type:'checkbox',checked:isSel,title:'一括操作用に選択',onchange:()=>toggleSelectTrain(t.id)}),
+     (t.type?'['+t.type+'] ':'')+t.name
+    ),
+    el('label',{class:'vis-label',title:'ダイヤグラムへの表示切り替え'},
+     '表示 ',
+     el('input',{type:'checkbox',checked:t.visible!==false,onchange:()=>toggleTrainVisibility(t.id)})
+    )
+   ),
+   el('div',{class:'train-card-bottom'},
+    el('button',{class:'secondary',disabled:i===0,title:'上に移動',onclick:()=>moveTrain(i,-1)},'↑'),
+    el('button',{class:'secondary',disabled:i===trains.length-1,title:'下に移動',onclick:()=>moveTrain(i,1)},'↓'),
+    el('button',{class:'secondary',onclick:()=>editTrain(t.id)},'編集'),
+    el('button',{class:'secondary',onclick:()=>duplicateTrain(t.id)},'複製'),
+    el('button',{class:'danger',onclick:()=>deleteTrain(t.id)},'削除')
+   )
+  );
+ }));
+}
+
+function updateRowTimeState(arrInput,depInput,row){
+ const mob=isMob();
+ if(row.kind==='pass'){
+  arrInput.disabled=true;
+  arrInput.placeholder=mob?'通過':'通過（入力不可）';
+  depInput.placeholder=mob?'通過時刻':'例 0625 / 2530';
+  return;
+ }
+ arrInput.disabled=false;
+ if(mob){
+  const fa=row.arr?inputFormat(row.arr):'',fd=row.dep?inputFormat(row.dep):'';
+  arrInput.placeholder=fd&&!fa?fd:'0625';
+  depInput.placeholder=fa&&!fd?fa:'0626';
+ }else{
+  arrInput.placeholder='例 0625 / 2530';
+  depInput.placeholder='例 0625 / 2530';
+ }
+}
+
+function setRowKind(tr,kindSeg,arrInput,depInput,row,newKind){
+ if(newKind==='pass'&&!row.dep&&row.arr){row.dep=row.arr;row.arr='';arrInput.value='';depInput.value=row.dep}
+ row.kind=newKind;
+ tr.className='kind-'+newKind;
+ kindSeg.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.dataset.kind===newKind));
+ updateRowTimeState(arrInput,depInput,row);
+}
+
+function focusNextTimeInput(cur){
+ const inputs=Array.from($('timeTable').querySelectorAll('input.time:not(:disabled)'));
+ const idx=inputs.indexOf(cur);
+ if(idx>=0&&idx+1<inputs.length){inputs[idx+1].focus();inputs[idx+1].select()}
+}
+
+function drawTable(){
+ const mob=isMob(),table=$('timeTable');
+ table.classList.toggle('mob-edit-stations',mob&&mobStationEditMode);
+ table.querySelector('tbody').replaceChildren(...stations.map((s,i)=>{
+  const r=formRows[i]||freshRow(),inputs={};
+  const tr=el('tr',{class:'kind-'+r.kind});
+
+  const nameCell=(!mob||mobStationEditMode)
+   ?el('input',{value:s.name,'aria-label':'駅名',onchange:e=>renameStation(s.id,e.target.value)})
+   :el('span',{class:'st-mob-label'},s.name);
+  tr.append(el('td',null,nameCell));
+
+  const kindSeg=el('div',{class:'kind-seg'},
+   ...[['stop','停車'],['pass','通過'],['none','なし']].map(([v,l])=>
+    el('button',{type:'button',class:r.kind===v?'active':'',dataset:{kind:v},onclick:()=>setRowKind(tr,kindSeg,inputs.arr,inputs.dep,formRows[i],v)},l)
+   )
+  );
+
+  ['arr','dep'].forEach(key=>{
+   const inp=el('input',{
+    class:'time',inputMode:'tel',value:r[key],'aria-label':s.name+(key==='arr'?' 着時刻':' 発時刻'),
+    oninput:()=>{
+     const val=inp.value;formRows[i][key]=val;
+     if(val.trim()!==''&&formRows[i].kind==='none')setRowKind(tr,kindSeg,inputs.arr,inputs.dep,formRows[i],'stop');
+     updateRowTimeState(inputs.arr,inputs.dep,formRows[i]);
+     if(isMob()){
+      const clean=val.trim();
+      if((/^\d{4}$/.test(clean)||/^-\d{4}$/.test(clean))&&!Number.isNaN(parseTime(clean))){
+       const fmt=inputFormat(clean);inp.value=fmt;formRows[i][key]=fmt;
+       updateRowTimeState(inputs.arr,inputs.dep,formRows[i]);
+       focusNextTimeInput(inp);
+      }
+     }
+    },
+    onblur:()=>{
+     if(inp.value){const v=inputFormat(inp.value);inp.value=v;formRows[i][key]=v}
+     updateRowTimeState(inputs.arr,inputs.dep,formRows[i]);
+    }
+   });
+   inputs[key]=inp;
+   tr.append(el('td',null,inp));
+  });
+
+  tr.append(el('td',null,kindSeg));
+  updateRowTimeState(inputs.arr,inputs.dep,r);
+
+  tr.append(el('td',{class:'col-st-ops'},
+   el('div',{class:'station-tools'},
+    el('button',{class:'secondary',disabled:i===0,onclick:()=>moveStation(i,-1)},'↑'),
+    el('button',{class:'secondary',disabled:i===stations.length-1,onclick:()=>moveStation(i,1)},'↓'),
+    el('button',{class:'danger',onclick:()=>deleteStation(s.id)},'削除')
+   )
+  ));
+  return tr;
+ }));
+}
+
+function renameStation(id,value){
+ const name=value.trim();if(!name){alert('[E1001] 駅名を空欄にはできません。');drawTable();return}
+ if(stations.some(s=>s.id!==id&&s.name===name)){alert('[E1002] 同じ駅名は重複して登録できません。');drawTable();return}
+ const s=stations.find(x=>x.id===id);if(!s)return;const old=s.name;s.name=name;
+ trains.forEach(t=>t.points.forEach(p=>{if(p.station===old)p.station=name}));
+ drawTable();renderDiagram();saveToStorage();
+}
+
+function addStation(){
+ const name=$('newStation').value.trim();if(!name)return;
+ if(stations.some(s=>s.name===name)){alert('[E1002] 同じ駅名は重複して登録できません。');return}
+ stations.push({id:uid(),name});$('newStation').value='';formRows.push(freshRow());
+ commit(name+'を追加しました。');
+}
+
+function reverseStations(){
+ if(stations.length<2){status('駅が2駅以上あるときに入れ替えられます。',true);return}
+ stations.reverse();formRows.reverse();isReversed=!isReversed;
+ commit('駅順（上下線）を反転しました。');
+}
+
+function deleteStation(id){
+ const s=stations.find(x=>x.id===id);if(!s)return;
+ if(!confirm(s.name+'を削除しますか？登録済み列車の該当駅データも削除されます。'))return;
+ const idx=stations.findIndex(x=>x.id===id);stations.splice(idx,1);
+ trains.forEach(t=>t.points=t.points.filter(p=>p.station!==s.name));formRows.splice(idx,1);
+ commit(s.name+'を削除しました。');
+}
+
+function moveStation(index,delta){
+ const target=index+delta;if(target<0||target>=stations.length)return;
+ [stations[index],stations[target]]=[stations[target],stations[index]];
+ [formRows[index],formRows[target]]=[formRows[target],formRows[index]];
+ commit();
+}
+
+function svgTag(tag,attrs,text){
+ const a=Object.entries(attrs).map(([k,v])=>k+'="'+v+'"').join(' ');
+ return text!=null?'<'+tag+' '+a+'>'+text+'</'+tag+'>':'<'+tag+' '+a+'/>';
+}
+
+function renderDiagram(){
+ const svg=$('diagram'),start=parseTime($('startTime').value),end=parseTime($('endTime').value);
+ if(start==null||end==null||Number.isNaN(start)||Number.isNaN(end)||end<=start){svg.innerHTML='<text x="20" y="35" fill="#a33">[E4001] 表示時刻を確認してください（終了は開始より後）。</text>';return}
+ const W=1150,L=145,R=75,T=70,B=55,ph=Math.max(350,stations.length*58),H=T+ph+B,pw=W-L-R;
+ const x=t=>L+(t-start)/(end-start)*pw,y=i=>T+(stations.length<2?0:i*ph/(stations.length-1));
+ const dk=theme==='dark',gridColor=dk?'#334155':'#dce3eb',stLine=dk?'#475569':'#cbd5df',txtColor=dk?'#cbd5e1':'#24364a',subColor=dk?'#94a3b8':'#425466';
+
+ let z=svgTag('rect',{width:W,height:H,fill:dk?'#0f172a':'white'});
+ z+=svgTag('text',{x:W/2,y:32,'text-anchor':'middle','font-size':18,'font-weight':'bold',fill:txtColor},escapeXML($('diagramTitle').value.trim()||'路線ダイヤグラム'));
+
+ const step=(end-start)>360?60:30;
+ for(let t=Math.ceil(start/step)*step;t<=end;t+=step){
+  const xx=x(t);
+  z+=svgTag('line',{x1:xx,y1:T,x2:xx,y2:T+ph,stroke:gridColor})+svgTag('text',{x:xx,y:T-12,'text-anchor':'middle','font-size':12,fill:subColor},format(t));
+ }
+ stations.forEach((s,i)=>{
+  const yy=y(i),nm=escapeXML(s.name);
+  z+=svgTag('line',{x1:L,y1:yy,x2:W-R,y2:yy,stroke:stLine})
+   +svgTag('text',{x:L-12,y:yy+4,'text-anchor':'end','font-size':12,fill:txtColor},nm)
+   +svgTag('text',{x:W-R+12,y:yy+4,'text-anchor':'start','font-size':12,fill:txtColor},nm);
+ });
+
+ if(stations.length>=2){
+  const cDown=isReversed?(dk?'#fb923c':'#d35400'):(dk?'#38bdf8':'#1769aa');
+  const cUp=isReversed?(dk?'#38bdf8':'#1769aa'):(dk?'#fb923c':'#d35400');
+  z+=svgTag('text',{x:35,y:T-12,'text-anchor':'middle','font-size':11,'font-weight':'bold',fill:cDown},isReversed?'上り ↓':'下り ↓')
+   +svgTag('text',{x:35,y:T-25,'text-anchor':'middle','font-size':11,'font-weight':'bold',fill:cUp},isReversed?'↑ 下り':'↑ 上り');
+ }
+
+ trains.forEach(t=>{
+  if(t.visible===false)return;
+  const nodes=[];
+  t.points.forEach(p=>{
+   const idx=stations.findIndex(s=>s.name===p.station);
+   if(idx<0||p.kind==='none')return;
+   const yPos=y(idx),arrT=p.arr,depT=p.dep;
+   if(arrT!=null&&depT!=null&&arrT!==depT&&p.kind==='stop'){
+    nodes.push({time:arrT,x:x(arrT),y:yPos,kind:p.kind},{time:depT,x:x(depT),y:yPos,kind:p.kind});
+   }else{
+    const tv=arrT??depT;
+    if(tv!=null)nodes.push({time:tv,x:x(tv),y:yPos,kind:p.kind});
+   }
+  });
+  if(nodes.length<2)return;
+  nodes.sort((a,b)=>a.time-b.time);
+  const inRange=nodes.filter(n=>n.time>=start&&n.time<=end),col=safeColor(t.color);
+  if(inRange.length>=2)z+=svgTag('polyline',{points:inRange.map(n=>n.x+','+n.y).join(' '),fill:'none',stroke:col,'stroke-width':'2.4','stroke-linejoin':'round'});
+  inRange.forEach(n=>{
+   z+=n.kind==='pass'
+    ?svgTag('path',{d:'M '+(n.x-4)+' '+(n.y-4)+' L '+(n.x+4)+' '+(n.y+4)+' M '+(n.x-4)+' '+(n.y+4)+' L '+(n.x+4)+' '+(n.y-4),stroke:col,'stroke-width':2})
+    :svgTag('circle',{cx:n.x,cy:n.y,r:3,fill:col});
+  });
+  if(inRange.length){
+   const last=inRange[inRange.length-1],anchor=last.x+70>W-R?'end':'start';
+   const lx=anchor==='end'?Math.min(W-R-5,last.x-7):Math.min(W-R-10,Math.max(L+5,last.x+7));
+   z+=svgTag('text',{x:lx,y:last.y-7,'text-anchor':anchor,'font-size':11,fill:col},escapeXML(t.name));
+  }
+ });
+
+ svg.setAttribute('viewBox','0 0 '+W+' '+H);svg.setAttribute('width',W);svg.setAttribute('height',H);svg.innerHTML=z;
+ $('legend').replaceChildren(...trains.filter(t=>t.visible!==false).map(t=>
+  el('span',null,el('i',{class:'swatch',style:'background:'+safeColor(t.color)}),(t.type?'['+t.type+'] ':'')+t.name)
+ ));
+}
+
+function safeColor(c){return /^#[0-9a-f]{6}$/i.test(c||'')?c:'#1769aa'}
+function escapeXML(v){return String(v).replace(/[<>&"']/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[c]))}
+function render(){drawList();drawTable();renderDiagram()}
+
+function setMobileView(view){
+ document.body.setAttribute('data-mob-view',view);
+ document.querySelectorAll('#mobileNav button').forEach(btn=>{
+  const act=btn.dataset.mobTarget===view;
+  btn.classList.toggle('active',act);btn.setAttribute('aria-current',act?'page':'false');
+ });
+ if(view==='input'||view==='diagram'){
+  const tt=view==='input';
+  $('timetablePane').hidden=!tt;$('diagramPane').hidden=tt;
+  $('tabTimetable').className=tt?'active':'secondary';$('tabDiagram').className=tt?'secondary':'active';
+  if(!tt)renderDiagram();
+ }
+}
+
+function showTab(which){setMobileView(which==='timetable'?'input':'diagram')}
+function toggleTheme(){applyTheme(theme==='light'?'dark':'light');renderDiagram();saveToStorage()}
+
+function exportJSON(){
+ const title=$('diagramTitle').value.trim()||'路線ダイヤグラム';
+ const data={version:VER,title:$('diagramTitle').value,isReversed,theme,stations:stations.map(s=>({name:s.name})),trains:trains.map(t=>({id:t.id,name:t.name,type:t.type,color:t.color,visible:t.visible!==false,points:t.points.map(p=>({station:p.station,arr:p.arr,dep:p.dep,kind:p.kind}))}))};
+ download(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),title+'.json');
+}
+
+function normalizeLoaded(d){
+ if(!d||!Array.isArray(d.stations)||!Array.isArray(d.trains))throw Error('[E5001] JSONの形式が違います。');
+ isReversed=!!d.isReversed;
+ if(d.title)$('diagramTitle').value=d.title;
+ applyTheme(d.theme);
+ const ss=d.stations.map(s=>({id:uid(),name:String(typeof s==='string'?s:(s.name??'')).trim()}));
+ if(ss.some(s=>!s.name))throw Error('[E5002] 駅名が空欄のデータがあります。');
+ if(new Set(ss.map(s=>s.name)).size!==ss.length)throw Error('[E5003] 駅名が重複しています。');
+ const ts=d.trains.map(t=>{
+  const points=Array.isArray(t.points)
+   ?ss.map(s=>{const p=t.points.find(p=>p.station===s.name)||{};return {station:s.name,arr:finiteOrNull(p.arr),dep:finiteOrNull(p.dep),kind:['none','stop','pass'].includes(p.kind)?p.kind:'stop'}})
+   :ss.map(s=>{const v=t.stops?.[s.name]??t.stops?.[s.name+',路線未設定']??null,n=typeof v==='string'?parseTime(v):v;return {station:s.name,arr:null,dep:finiteOrNull(n),kind:n==null?'none':'stop'}});
+  return {id:uid(),name:String(t.name||'無名列車'),type:String(t.type||''),color:safeColor(t.color),visible:t.visible!==false,points};
+ });
+ return {stations:ss,trains:ts};
+}
+
+function finiteOrNull(v){return typeof v==='number'&&Number.isFinite(v)?v:null}
+async function loadJSON(e){
+ const f=e.target.files[0];if(!f)return;
+ try{
+  let d;try{d=JSON.parse(await f.text())}catch(_){throw Error('[E5004] JSONファイルの構文が壊れています。')}
+  const n=normalizeLoaded(d);stations=n.stations;trains=n.trains;selectedTrainIds.clear();resetForm();commit('JSONを読み込みました。');
+ }catch(err){alert('読み込み失敗：'+err.message)}
+ e.target.value='';
+}
+
+function exportCSV(){
+ const rows=[['列車名','種別','駅名','着時刻','発時刻','扱い']];
+ trains.forEach(t=>t.points.forEach(p=>rows.push([t.name,t.type,p.station,p.arr==null?'':format(p.arr),p.dep==null?'':format(p.dep),p.kind])));
+ const csv='\uFEFF'+rows.map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\r\n');
+ download(new Blob([csv],{type:'text/csv;charset=utf-8'}),'railway-diagram-v'+VER+'.csv');
+}
+
+function exportSVG(){
+ const c=$('diagram').cloneNode(true);c.setAttribute('xmlns',NS);
+ download(new Blob([new XMLSerializer().serializeToString(c)],{type:'image/svg+xml;charset=utf-8'}),'railway-diagram-v'+VER+'.svg');
+}
+
+function exportPNG(){
+ const src=new XMLSerializer().serializeToString($('diagram')),u=URL.createObjectURL(new Blob([src],{type:'image/svg+xml;charset=utf-8'})),img=new Image();
+ img.onload=()=>{const c=el('canvas',{width:img.width*2,height:img.height*2}),ctx=c.getContext('2d');ctx.scale(2,2);ctx.fillStyle=theme==='dark'?'#0f172a':'white';ctx.fillRect(0,0,img.width,img.height);ctx.drawImage(img,0,0);URL.revokeObjectURL(u);c.toBlob(b=>{if(b)download(b,'railway-diagram-v'+VER+'.png');else alert('[E5005] PNG変換に失敗しました。')})};
+ img.onerror=()=>{URL.revokeObjectURL(u);alert('[E5006] PNG変換に失敗しました。SVG保存をお試しください。')};img.src=u;
+}
+
+document.querySelectorAll('#mobileNav button').forEach(btn=>{btn.onclick=()=>{setMobileView(btn.dataset.mobTarget);window.scrollTo({top:0,behavior:'smooth'})}});
+window.addEventListener('resize',()=>{const m=isMob();if(m!==lastIsMob){lastIsMob=m;drawTable()}});
+$('diagramTitle').oninput=()=>{renderDiagram();saveToStorage()};
+$('newStation').addEventListener('keydown',e=>{if(e.key==='Enter')addStation()});
+$('jsonFile').onchange=loadJSON;
+
+Object.entries({
+ toggleProjects:()=>{const d=$('projDrawer'),open=d.hidden;d.hidden=!open;$('toggleProjects').setAttribute('aria-expanded',String(open));$('projArrow').textContent=open?'▲':'▼'},
+ newProjectBtn:createNewProject,
+ toggleMobStationEdit:()=>{mobStationEditMode=!mobStationEditMode;$('toggleMobStationEdit').classList.toggle('active',mobStationEditMode);$('toggleMobStationEdit').textContent=mobStationEditMode?'✓ 駅編集を完了':'⚙️ 駅順・駅名編集';drawTable()},
+ toggleSelectAll,sortTrainByTime,toggleTheme,addStation,reverseStations,mobReverseStations:reverseStations,
+ bulkMoveUp:()=>bulkMoveTrains(-1),bulkMoveDown:()=>bulkMoveTrains(1),bulkDuplicate:bulkDuplicateTrains,bulkDelete:bulkDeleteTrains,
+ newTrain:()=>{resetForm();status('新しい列車を入力できます。')},
+ saveTrain,saveTrainBottom:saveTrain,
+ cancelEdit:()=>{resetForm();status('編集を取り消しました。')},
+ fillDemo:()=>{formRows=stations.map((s,i)=>({arr:i===2?'':format(8*60+i*8),dep:format(8*60+2+i*8),kind:i===2?'pass':'stop'}));drawTable()},
+ clearTimes:()=>{makeRows();status('時刻欄をクリアしました。')},
+ tabTimetable:()=>showTab('timetable'),tabDiagram:()=>showTab('diagram'),
+ redraw:()=>{renderDiagram();saveToStorage()},
+ saveJson:exportJSON,loadJson:()=>$('jsonFile').click(),
+ saveSvg:exportSVG,saveCsv:exportCSV,savePng:exportPNG
+}).forEach(([id,fn])=>$(id).onclick=fn);
+
+if(!loadFromStorage()){
+ stations=['大阪','新大阪','茨木','高槻','京都','山科','堅田'].map(name=>({id:uid(),name}));
+ formRows=stations.map((s,i)=>({arr:i===2?'':format(8*60+i*8),dep:format(8*60+2+i*8),kind:i===2?'pass':'stop'}));
+ trains=[
+  {id:uid(),name:'新快速 1号（下り）',type:'新快速',color:'#1769aa',visible:true,points:stations.map((s,i)=>({station:s.name,arr:i===2?null:480+i*8,dep:482+i*8,kind:i===2?'pass':'stop'}))},
+  {id:uid(),name:'普通 2号（上り）',type:'普通',color:'#d35400',visible:true,points:stations.map((s,i)=>({station:s.name,arr:520+(6-i)*10,dep:521+(6-i)*10,kind:'stop'}))}
+ ];
+ activeProjectId=uid();saveToStorage();
+}
+drawList();drawTable();renderDiagram();
+// ver.5.14.2
+})();
+</script>
+</body>
+</html>
